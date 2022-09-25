@@ -40,10 +40,6 @@ TFT_eSprite analog_face = TFT_eSprite(&tft);
 #define SCREEN_W 240
 #define SCREEN_H 240
 
-// Time for next tick
-uint32_t targetTime = 0;
-float tick_ms = 0;
-
 // handle multiple displays via CS pin
 #define num_displays 2
 uint8_t display_cs_pins[num_displays] = {22,21};
@@ -233,11 +229,12 @@ void setup() {
 // =========================================================================
 // Loop
 // =========================================================================
-int last_second = 0;
-int fps=18;           // an estimate, EPS32 and 2x GC9A01 can reach 20+ FPS
-float avg_fps=18.0;
-float time_secs;
-int ms_offset = 0;
+uint32_t targetTime = 0;    // Time for next tick
+int fps=18;                 // frame rate counter, start val is an estimate
+float avg_fps=18.0;         // running average across 2 loop samples
+float time_secs;            // time in seconds+ms sent to rendering functions
+int last_second = 0;        // for checking when to update the digital clock
+int ms_offset = 0;          // offset of millis() since start of the last sec
 
 void loop() {
   long m = millis();
@@ -253,8 +250,6 @@ void loop() {
 
     if (secs != last_second){
       ms_offset = m;
-      Serial.print(" tick_ms="); Serial.println(tick_ms);
-      tick_ms = 0.0;
       last_second = secs;
       Serial.print(" FPS > ");
       Serial.println(fps);
@@ -274,7 +269,6 @@ void loop() {
 
     // Keep track of frame rate and use it to keep the animation consistent
     fps++;
-    tick_ms += 0.9 / avg_fps;
 
     // Serial.println(time_secs);
   }
