@@ -107,8 +107,8 @@ static void renderDigitalFace(float t, uint16_t bg_color) {
     digital_face_hours.setTextColor(CLOCK_FG, bg_color);  
     digital_face_hours.setTextDatum(MR_DATUM);
     snprintf(cnum, 10, "%02d", (int)t/3600);  // hours
-    digital_face_hours.drawString(cnum, digital_face_hours.width(), digital_face_hours.height()/2);    
-    digital_face_hours.pushSprite(digital_face_hours.width()*0.15, tft.height()/2 - digital_face_hours.height()/2); 
+    digital_face_hours.drawString(cnum, digital_face_hours.width()-2, digital_face_hours.height()/2);    
+    digital_face_hours.pushSprite(2, tft.height()/2 - digital_face_hours.height()/2); 
   }
   
   // update minutes and seconds
@@ -200,10 +200,10 @@ void setup() {
   
   // Create the clock face sprite
   //face.setColorDepth(8); // 8 bit will work, but reduces effectiveness of anti-aliasing
-  digital_face_minutes.createSprite(SCREEN_W / 2.2, SCREEN_H / 2);
+  digital_face_minutes.createSprite(SCREEN_W / 2, SCREEN_H / 2);
   digital_face_minutes.loadFont("Mali-Bold-60");
 
-  digital_face_hours.createSprite(SCREEN_W / 2.2, SCREEN_H / 2);  
+  digital_face_hours.createSprite(SCREEN_W / 2, SCREEN_H / 2);  
   digital_face_hours.loadFont("Mali-Bold-90");
 
   analog_face.createSprite(SCREEN_W, SCREEN_H);
@@ -218,7 +218,7 @@ void setup() {
   // Ideally set orientation for good viewing angle range because
   // the anti-aliasing effectiveness varies with screen viewing angle
   // Usually this is when screen ribbon connector is at the bottom
-  tft.setRotation(0);
+  tft.setRotation(1);
   tft.fillScreen(TFT_BLACK);
   for (int i=0; i < num_displays; i++){
     digitalWrite(display_cs_pins[i],HIGH);
@@ -227,22 +227,23 @@ void setup() {
   tft.fillSmoothCircle( CLOCK_R-1, CLOCK_R-1, CLOCK_R, bg_colors[1] );
   digitalWrite(display_cs_pins[1], HIGH);
 
-  targetTime = millis() + 100;
+  targetTime = millis();
 }
 
 // =========================================================================
 // Loop
 // =========================================================================
 int last_second = 0;
-int fps=10;
-float avg_fps=10.0;
+int fps=18;           // an estimate, EPS32 and 2x GC9A01 can reach 20+ FPS
+float avg_fps=18.0;
 float time_secs;
+int ms_offset = 0;
 
 void loop() {
   long m = millis();
   if (targetTime < m) {   
-    // schedule next tick time for consistent movement
-    targetTime = m + 30;
+    // schedule next tick time for smoother movement
+    targetTime = m +  5;
 
     // Update time periodically
     int secs = timeClient.getSeconds();
@@ -251,6 +252,8 @@ void loop() {
               + secs;
 
     if (secs != last_second){
+      ms_offset = m;
+      Serial.print(" tick_ms="); Serial.println(tick_ms);
       tick_ms = 0.0;
       last_second = secs;
       Serial.print(" FPS > ");
@@ -262,17 +265,16 @@ void loop() {
       digitalWrite(display_cs_pins[1], LOW);
       renderDigitalFace(time_secs, bg_colors[1]);
       digitalWrite(display_cs_pins[1], HIGH);
-    } else {
-      // analog clock
-      digitalWrite(display_cs_pins[0], LOW);
-      renderAnalogFace(time_secs + tick_ms, bg_colors[0]);
-      digitalWrite(display_cs_pins[0], HIGH);
-    }
+    } 
 
+    // analog clock
+    digitalWrite(display_cs_pins[0], LOW);
+    renderAnalogFace(time_secs + (millis()-ms_offset)/1000.0, bg_colors[0]);
+    digitalWrite(display_cs_pins[0], HIGH);
 
+    // Keep track of frame rate and use it to keep the animation consistent
     fps++;
-    // Increment time by FPS milliseconds    
-    tick_ms += 1.1 / avg_fps;
+    tick_ms += 0.9 / avg_fps;
 
     // Serial.println(time_secs);
   }
