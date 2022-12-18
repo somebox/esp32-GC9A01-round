@@ -4,4 +4,6 @@ example showing two different clocks on round TFT SPI displays using ESP32 and e
 Using PlatformIO for library and TFT settings.
 To connecto to WIFI, this project uses WiFiManager - which means you may need to connect to it via WIFI the first time to configure things.
 
-![IMG_1803](https://user-images.githubusercontent.com/7750/192374782-bba783e8-466f-4ac7-a430-fbee2e6942d4.jpeg)
+![IMG_2304](https://user-images.githubusercontent.com/7750/208321457-5206c8bf-f860-4d96-82de-4c69bd5c64a9.jpeg)
+
+ 
