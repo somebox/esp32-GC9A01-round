@@ -3,18 +3,18 @@
 #include "time.h"
 #include <SPI.h>
 #include <TFT_eSPI.h>     // https://github.com/Bodmer/TFT_eSPI
+#include "WifiTimeLib.h"
 
 // Timezone config
 /* 
-  Enter your time zone (https://remotemonitoringsystems.ca/time-zone-abbreviations.php)
-  See https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv for Timezone codes for your region
-  based on https://github.com/SensorsIot/NTP-time-for-ESP8266-and-ESP32/blob/master/NTP_Example/NTP_Example.ino
+  Find your zone (https://remotemonitoringsystems.ca/time-zone-abbreviations.php)
+  Or see https://github.com/nayarsystems/posix_tz_db/blob/master/zones.csv for more codes for your region
+  
+  For example: USA eastern time: "EST5EDT,M3.2.0,M11.1.0", Central EU time: "CET-1CEST,M3.5.0,M10.5.0/3"
+  Pool can be "pool.ntp.org" or something more local
 */
-const char* NTP_SERVER = "ch.pool.ntp.org";
-const char* TZ_INFO    = "CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00";  // Switzerland
-
-// Wifi
-WiFiManager wm;   // looking for credentials? don't need em! ... google "ESP32 WiFiManager"
+// Set up WiFI and time sync, replace these with your own time settings (NTP server and timezone)
+WifiTimeLib wifiTimeLib("ch.pool.ntp.org", "CET-1CEST-2,M3.5.0/02:00:00,M10.5.0/03:00:00"); // Switzerland
 
 // Font files are stored in SPIFFS (flash ram)
 #define FS_NO_GLOBALS
@@ -51,7 +51,7 @@ TFT_eSprite analog_face = TFT_eSprite(&tft);
 // handle multiple displays via CS pin
 #define num_displays 2
 uint8_t display_cs_pins[num_displays] = {22,21};
-uint16_t bg_colors[num_displays] = {TFT_OLIVE, TFT_PURPLE};
+uint16_t bg_colors[num_displays] = {TFT_DARKGREEN, TFT_BLUE};
 
 // Time 
 tm timeinfo;
@@ -60,99 +60,6 @@ int hour = 0;
 int minute = 0;
 int second = 0;
 
-String getFormattedDate(){
-  char time_output[30];
-  strftime(time_output, 30, "%a  %d-%m-%y %T", &timeinfo);
-  return String(time_output);
-}
-
-String getFormattedTime(){
-  char time_output[30];
-  strftime(time_output, 30, "%H:%M:%S", &timeinfo);
-  return String(time_output);
-}
-
-void configModeCallback(WiFiManager *wm) {
-  Serial.println("Entered config mode");
-  Serial.println(WiFi.softAPIP());
-  Serial.println(wm->getConfigPortalSSID());
-}
-
-bool getNTPtime(int sec) {
-  if (WiFi.isConnected()) {
-    bool timeout = false;
-    bool date_is_valid = false;
-    long start = millis();
-
-    Serial.println(" updating:");
-    configTime(0, 0, NTP_SERVER);
-    setenv("TZ", TZ_INFO, 1);
-
-    do {
-      timeout = (millis() - start) > (1000 * sec);
-      time(&now);
-      localtime_r(&now, &timeinfo);
-      Serial.print(" . ");
-      date_is_valid = timeinfo.tm_year > (2016 - 1900);
-      delay(100);
-    } while (!timeout && !date_is_valid);
-    
-    Serial.println("\nSystem time is now:");
-    Serial.println(getFormattedDate());
-    Serial.println(getFormattedTime());
-    
-    if (!date_is_valid){
-      Serial.println("Error: Invalid date received!");
-      Serial.println(timeinfo.tm_year);
-      return false;  // the NTP call was not successful
-    } else if (timeout) {
-      Serial.println("Error: Timeout while trying to update the current time with NTP");
-      return false;
-    } else {
-      Serial.println("[ok] time updated: ");
-      return true;
-    }
-  } else {
-    Serial.println("Error: Update time failed, no WiFi connection!");
-    return false;
-  }
-}
-
-
-void ConnectToWifi(){
-  Serial.print("Connecting to WiFi");
-  WiFi.mode(WIFI_STA);
-  wm.setAPCallback(configModeCallback);
-
-  // wm.resetSettings();   // uncomment to force a reset
-  bool wifi_connected = wm.autoConnect("ESP32 Clock - Round Displays");
-  int t=0;
-  if (wifi_connected){
-    Serial.println();
-    Serial.println("WiFi connected");
-    Serial.print("IP address: ");
-    Serial.println(WiFi.localIP());
-    Serial.print("MAC address: ");
-    Serial.println(WiFi.macAddress());
-    Serial.print("RSSI: ");
-    Serial.print(WiFi.RSSI());
-    Serial.println("db");
-
-    delay(1000);
-
-    Serial.println("getting current time...");
-    
-    // timeClient.begin();
-    // timeClient.update();
-    if (getNTPtime(10)) {  // wait up to 10sec to sync
-      Serial.println("Time sync complete");
-    } else {
-      Serial.println("Error: NTP time update failed!");
-    }
-  } else {
-    Serial.println("ERROR: WiFi connect failure");
-  }
-}
 
 // =========================================================================
 // Get coordinates of end of a line, pivot at x,y, length r, angle a
@@ -253,21 +160,10 @@ static void renderAnalogFace(float t, uint16_t bg_color) {
 
 
 // =========================================================================
-// Setup
+// Setup displays
 // =========================================================================
-uint32_t targetTime = 0;    // Time for next tick
-void setup() {
-  Serial.begin(115200);
-  Serial.println("Booting...");
 
-  if (!SPIFFS.begin()) {
-    Serial.println("SPIFFS initialisation failed!");
-    while (1) yield(); // Stay here twiddling thumbs waiting
-  }
-  Serial.println("\r\nInitialisation done.");
-
-  ConnectToWifi();
-
+void setupDisplays(){
   for (int i=0; i < num_displays; i++){
     pinMode(display_cs_pins[i], OUTPUT);
     digitalWrite(display_cs_pins[i],HIGH);
@@ -293,7 +189,7 @@ void setup() {
   // Ideally set orientation for good viewing angle range because
   // the anti-aliasing effectiveness varies with screen viewing angle
   // Usually this is when screen ribbon connector is at the bottom
-  tft.setRotation(1);
+  tft.setRotation(0);
   tft.fillScreen(TFT_BLACK);
   for (int i=0; i < num_displays; i++){
     digitalWrite(display_cs_pins[i],HIGH);
@@ -301,6 +197,38 @@ void setup() {
   digitalWrite(display_cs_pins[1], LOW);
   tft.fillSmoothCircle( CLOCK_R-1, CLOCK_R-1, CLOCK_R, bg_colors[1] );
   digitalWrite(display_cs_pins[1], HIGH);
+}
+
+// =========================================================================
+// Setup
+// =========================================================================
+uint32_t targetTime = 0;    // Time for next tick
+void setup() {
+  Serial.begin(115200);
+  delay(500);
+  Serial.println("Booting...");
+
+  if (!SPIFFS.begin()) {
+    Serial.println("SPIFFS initialisation failed!");
+    while (1) yield(); // Stay here twiddling thumbs waiting
+  }
+  Serial.println("\r\nInitialisation done.");
+
+  // Connect to WiFi
+  if (wifiTimeLib.connectToWiFi("ESP32-Clock")){
+    delay(500);
+    Serial.println("getting current time...");
+    // get NTP time
+    if (wifiTimeLib.getNTPtime(10)) {  // wait up to 10sec to sync
+      Serial.println("Time sync complete");
+    } else {
+      Serial.println("Error: NTP time update failed!");
+    }
+  } else {
+    Serial.println("ERROR: WiFi connect failure");
+  }
+
+  setupDisplays();
 
   targetTime = millis();
 }
@@ -328,13 +256,9 @@ void loop() {
               + timeinfo.tm_min*60 
               + secs;
 
-    if (secs != last_second){
+    if (secs != last_second){ 
       ms_offset = m;
       last_second = secs;
-      Serial.print(" FPS > ");
-      Serial.println(fps);
-      avg_fps = (avg_fps + fps)/2;
-      fps = 0;
 
       // digital clock
       digitalWrite(display_cs_pins[1], LOW);
@@ -350,6 +274,13 @@ void loop() {
     // Keep track of frame rate and use it to keep the animation consistent
     fps++;
 
-    // Serial.println(time_secs);
+    if (millis() % 3000 == 0){
+        // report FPS every 3 seconds
+        Serial.print(" FPS > ");
+        Serial.println(fps);
+        avg_fps = (avg_fps + fps)/2;
+        fps = 0;
+    }
+
   }
 }
